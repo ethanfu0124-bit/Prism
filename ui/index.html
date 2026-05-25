@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prism</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F9F7F4;
+    --bg2: #EEEBE6;
+    --accent: #D97756;
+    --accent-hover: #C4633D;
+    --text: #1A1A1A;
+    --text2: #888580;
+    --border: rgba(0,0,0,0.08);
+    --shadow: 0 8px 32px rgba(0,0,0,0.12);
+    --radius: 12px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    overflow: hidden;
+    border-radius: var(--radius);
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ---- drag bar ---- */
+  #drag-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    height: 36px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+  }
+
+  #drag-bar .left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    -webkit-app-region: drag;
+  }
+
+  #app-name {
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, var(--accent), #E8956D);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  #drag-bar .right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+  }
+
+  .opacity-label {
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  #opacity-slider {
+    -webkit-app-region: no-drag;
+    width: 64px;
+    height: 3px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  #minimize-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #E5E5E5;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 12px;
+    transition: background 0.15s;
+    -webkit-app-region: no-drag;
+  }
+  #minimize-btn:hover { background: #D0D0D0; }
+
+  /* ---- mode selector ---- */
+  #mode-bar {
+    display: flex;
+    padding: 6px 10px 4px;
+    gap: 0;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 4px 0;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .mode-btn:first-child { border-radius: 6px 0 0 6px; }
+  .mode-btn:last-child { border-radius: 0 6px 6px 0; }
+  .mode-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .mode-btn:not(.active):hover { background: #E4E0D9; }
+
+  /* ---- textarea ---- */
+  #input-wrap {
+    flex: 1;
+    padding: 0 10px 6px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  #prompt-input {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    resize: none;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-app-region: no-drag;
+  }
+  #prompt-input:focus { border-color: var(--accent); }
+  #prompt-input::placeholder { color: var(--text2); }
+
+  /* ---- bottom bar ---- */
+  #bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 10px 8px;
+    flex-shrink: 0;
+    gap: 6px;
+    -webkit-app-region: no-drag;
+  }
+
+  #bottom-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  #project-label {
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+
+  #context-count {
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+  }
+
+  #fallback-badge {
+    display: none;
+    background: #F59E0B;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  #bottom-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22C55E;
+    flex-shrink: 0;
+  }
+  .status-dot.red { background: #EF4444; }
+
+  .icon-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: #E4E0D9; color: var(--text); }
+
+  #optimize-btn {
+    padding: 5px 12px;
+    border-radius: 7px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #optimize-btn:hover:not(:disabled) { background: var(--accent-hover); }
+  #optimize-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  /* ---- overlay base ---- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(249,247,244,0.97);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    gap: 10px;
+    z-index: 10;
+    animation: fadeIn 0.15s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+
+  .overlay-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .overlay-textarea {
+    flex: 1;
+    resize: none;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+    min-height: 0;
+    -webkit-app-region: no-drag;
+  }
+  .overlay-textarea:focus { border-color: var(--accent); }
+
+  .overlay-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .ov-btn {
+    padding: 5px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg2);
+    color: var(--text);
+  }
+  .ov-btn:hover { background: #E4E0D9; }
+  .ov-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ov-btn.primary:hover { background: var(--accent-hover); }
+
+  /* ---- history overlay ---- */
+  #history-overlay .history-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .history-item {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .history-item:hover { background: #E4E0D9; }
+
+  .history-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text2);
+    margin-bottom: 3px;
+  }
+
+  .history-snippet {
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .history-detail {
+    display: none;
+    margin-top: 8px;
+    gap: 6px;
+    flex-direction: column;
+  }
+  .history-detail.open { display: flex; }
+
+  .history-detail-section { font-size: 11px; color: var(--text2); }
+  .history-detail-text {
+    font-size: 12px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 80px;
+    overflow-y: auto;
+  }
+
+  .history-restore-btn {
+    align-self: flex-end;
+    padding: 3px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .history-restore-btn:hover { background: var(--accent); color: #fff; }
+
+  /* ---- toast ---- */
+  #toast {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1A1A1A;
+    color: #fff;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- drag bar -->
+  <div id="drag-bar">
+    <div class="left">
+      <span id="app-name">Prism</span>
+    </div>
+    <div class="right">
+      <span class="opacity-label">透明度</span>
+      <input type="range" id="opacity-slider" min="60" max="100" value="100" step="1">
+      <button id="minimize-btn" title="最小化">−</button>
+    </div>
+  </div>
+
+  <!-- mode selector -->
+  <div id="mode-bar">
+    <button class="mode-btn" data-mode="concise">精简</button>
+    <button class="mode-btn active" data-mode="detailed">详细</button>
+  </div>
+
+  <!-- textarea -->
+  <div id="input-wrap">
+    <textarea id="prompt-input" placeholder="输入你的 prompt 草稿..."></textarea>
+  </div>
+
+  <!-- bottom bar -->
+  <div id="bottom-bar">
+    <div id="bottom-left">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="project-label">加载中...</span>
+      <span id="context-count"></span>
+      <span id="fallback-badge">回退模式</span>
+    </div>
+    <div id="bottom-right">
+      <button class="icon-btn" id="history-btn" title="优化历史">⏱</button>
+      <button class="icon-btn" id="refresh-btn" title="刷新上下文">↻</button>
+      <button id="optimize-btn" disabled>✨ 优化</button>
+    </div>
+  </div>
+
+  <!-- result overlay -->
+  <div class="overlay" id="result-overlay" style="display:none;">
+    <div class="overlay-title">✨ 优化结果</div>
+    <textarea class="overlay-textarea" id="result-text"></textarea>
+    <div class="overlay-actions">
+      <button class="ov-btn" id="cancel-btn">取消</button>
+      <button class="ov-btn" id="copy-btn">复制</button>
+      <button class="ov-btn primary" id="replace-btn">替换</button>
+    </div>
+  </div>
+
+  <!-- history overlay -->
+  <div class="overlay" id="history-overlay" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="overlay-title">⏱ 优化历史</div>
+      <button class="ov-btn" id="history-close-btn" style="padding:3px 10px;">关闭</button>
+    </div>
+    <div class="history-list" id="history-list"></div>
+  </div>
+
+  <!-- toast -->
+  <div id="toast"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---- state
+let currentMode = 'detailed';
+let isConnected = false;
+let isDragging = false;
+let dragOffX = 0, dragOffY = 0;
+let toastTimer = null;
+
+// ---- init
+window.addEventListener('pywebviewready', async () => {
+  const state = await window.pywebview.api.get_initial_state();
+  applyInitialState(state);
+  setupDrag();
+});
+
+function applyInitialState(state) {
+  const cfg = state.config || {};
+
+  // opacity
+  const opacityPct = Math.round((cfg.opacity || 1.0) * 100);
+  $('opacity-slider').value = opacityPct;
+  document.documentElement.style.opacity = (opacityPct / 100).toString();
+
+  // mode
+  currentMode = cfg.optimize_mode || 'detailed';
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === currentMode);
+  });
+
+  // connection
+  isConnected = state.connected;
+  updateConnectionUI(isConnected);
+
+  // context
+  updateContextStatus(state.project_label, state.context_count, state.fallback_mode);
+}
+
+// ---- context status (called from Python too)
+window.updateContextStatus = function(label, count, fallback) {
+  $('project-label').textContent = label || '未检测到项目';
+  $('context-count').textContent = count > 0 ? `· 已读取 ${count} 条上下文` : '';
+  $('fallback-badge').style.display = fallback ? 'inline-flex' : 'none';
+};
+
+function updateConnectionUI(connected) {
+  isConnected = connected;
+  const dot = $('status-dot');
+  dot.classList.toggle('red', !connected);
+  $('optimize-btn').disabled = !connected;
+  if (!connected) {
+    $('project-label').textContent = '未登录 — 请启动 Claude Code 完成登录';
+  }
+}
+
+// ---- opacity slider
+$('opacity-slider').addEventListener('input', e => {
+  const val = parseInt(e.target.value) / 100;
+  document.documentElement.style.opacity = val.toString();
+  window.pywebview.api.save_opacity(val);
+});
+
+// ---- mode buttons
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    window.pywebview.api.save_optimize_mode(currentMode);
+  });
+});
+
+// ---- minimize
+$('minimize-btn').addEventListener('click', () => {
+  // pywebview doesn't expose minimize directly via JS; use the API
+  try { window.pywebview.api.minimize_window(); } catch(e) {}
+});
+
+// ---- refresh
+$('refresh-btn').addEventListener('click', async () => {
+  $('refresh-btn').textContent = '…';
+  const state = await window.pywebview.api.refresh_context();
+  $('refresh-btn').textContent = '↻';
+  updateConnectionUI(state.connected);
+  updateContextStatus(state.project_label, state.context_count, state.fallback_mode);
+  showToast('上下文已刷新');
+});
+
+// ---- optimize
+$('optimize-btn').addEventListener('click', async () => {
+  const draft = $('prompt-input').value.trim();
+  if (!draft) { showToast('请先输入 prompt 草稿'); return; }
+
+  const btn = $('optimize-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 优化中';
+
+  try {
+    const result = await window.pywebview.api.optimize_prompt(draft, currentMode);
+    if (result.error) {
+      if (result.error === 'auth') updateConnectionUI(false);
+      showToast(result.message || '优化失败');
+    } else {
+      showResultOverlay(result.text);
+    }
+  } finally {
+    btn.disabled = !isConnected;
+    btn.innerHTML = '✨ 优化';
+  }
+});
+
+// ---- result overlay
+function showResultOverlay(text) {
+  $('result-text').value = text;
+  $('result-overlay').style.display = 'flex';
+}
+
+$('cancel-btn').addEventListener('click', () => {
+  $('result-overlay').style.display = 'none';
+});
+
+$('replace-btn').addEventListener('click', () => {
+  $('prompt-input').value = $('result-text').value;
+  $('result-overlay').style.display = 'none';
+});
+
+$('copy-btn').addEventListener('click', async () => {
+  const text = $('result-text').value;
+  await window.pywebview.api.copy_to_clipboard(text);
+  showToast('已复制到剪贴板');
+  $('result-overlay').style.display = 'none';
+});
+
+// ---- history overlay
+$('history-btn').addEventListener('click', async () => {
+  const history = await window.pywebview.api.get_history();
+  renderHistory(history);
+  $('history-overlay').style.display = 'flex';
+});
+
+$('history-close-btn').addEventListener('click', () => {
+  $('history-overlay').style.display = 'none';
+});
+
+function renderHistory(items) {
+  const list = $('history-list');
+  list.innerHTML = '';
+  if (!items || items.length === 0) {
+    list.innerHTML = '<div style="color:var(--text2);font-size:12px;text-align:center;padding:20px">暂无历史记录</div>';
+    return;
+  }
+  [...items].reverse().forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    const ts = new Date(item.timestamp).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const modeLabel = item.mode === 'concise' ? '精简' : '详细';
+    const snippet = (item.draft || '').slice(0, 30) + ((item.draft || '').length > 30 ? '…' : '');
+    div.innerHTML = `
+      <div class="history-meta">
+        <span>${ts}</span>
+        <span>${modeLabel}模式</span>
+      </div>
+      <div class="history-snippet">${escapeHtml(snippet)}</div>
+      <div class="history-detail" id="hd-${idx}">
+        <div class="history-detail-section">原始草稿</div>
+        <div class="history-detail-text">${escapeHtml(item.draft || '')}</div>
+        <div class="history-detail-section">优化结果</div>
+        <div class="history-detail-text">${escapeHtml(item.optimized || '')}</div>
+        <button class="history-restore-btn">恢复到输入框</button>
+      </div>
+    `;
+    div.querySelector('.history-snippet').addEventListener('click', () => {
+      const detail = div.querySelector('.history-detail');
+      detail.classList.toggle('open');
+    });
+    div.querySelector('.history-restore-btn').addEventListener('click', e => {
+      $('prompt-input').value = item.draft || '';
+      $('history-overlay').style.display = 'none';
+      showToast('已恢复到输入框');
+      e.stopPropagation();
+    });
+    list.appendChild(div);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- toast
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---- drag (frameless window drag via mouse events on drag-bar)
+function setupDrag() {
+  const bar = $('drag-bar');
+
+  bar.addEventListener('mousedown', e => {
+    if (e.target.closest('input, button')) return;
+    isDragging = true;
+    dragOffX = e.screenX;
+    dragOffY = e.screenY;
+  });
+
+  document.addEventListener('mousemove', async e => {
+    if (!isDragging) return;
+    const dx = e.screenX - dragOffX;
+    const dy = e.screenY - dragOffY;
+    dragOffX = e.screenX;
+    dragOffY = e.screenY;
+    try {
+      await window.pywebview.api.move_window(dx, dy);
+    } catch(err) {}
+  });
+
+  document.addEventListener('mouseup', async () => {
+    if (!isDragging) return;
+    isDragging = false;
+    try {
+      const pos = await window.pywebview.api.get_window_position();
+      if (pos) {
+        await window.pywebview.api.save_window_position(pos.x, pos.y);
+      }
+    } catch(err) {}
+  });
+}
+</script>
+</body>
+</html>
