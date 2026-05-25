@@ -96,3 +96,4 @@ pyinstaller --onefile --noconsole --add-data "ui;ui" main.py
 ```
 
 生成文件在 `dist/main.exe`。
+ 
