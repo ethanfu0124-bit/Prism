@@ -550,21 +550,23 @@
       <div class="overlay-title">⚙ API 设置</div>
       <button class="ov-btn" id="settings-close-btn" style="padding:3px 10px;">关闭</button>
     </div>
-    <div class="settings-section">
-      <div class="settings-label">Claude Code 账户</div>
-      <div class="settings-oauth-status">
-        <div class="status-dot" id="settings-oauth-dot"></div>
-        <span id="settings-oauth-text">检测中…</span>
+    <div style="flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:10px;padding-right:2px;">
+      <div class="settings-section">
+        <div class="settings-label">Claude Code 账户</div>
+        <div class="settings-oauth-status">
+          <div class="status-dot" id="settings-oauth-dot"></div>
+          <span id="settings-oauth-text">检测中…</span>
+        </div>
       </div>
+      <div class="settings-section">
+        <div class="settings-label">自定义 API Key（留空则使用上方账户）</div>
+        <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-…" autocomplete="off">
+        <div class="settings-label" style="margin-top:6px;">模型</div>
+        <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6">
+      </div>
+      <div class="settings-hint">自定义 API Key 优先级高于 Claude Code 账户。<br>获取 API Key：<span style="color:var(--accent);">console.anthropic.com</span></div>
     </div>
-    <div class="settings-section">
-      <div class="settings-label">自定义 API Key（留空则使用上方账户）</div>
-      <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-…" autocomplete="off">
-      <div class="settings-label" style="margin-top:4px;">模型</div>
-      <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6">
-    </div>
-    <div class="settings-hint">自定义 API Key 优先级高于 Claude Code 账户。</div>
-    <div class="overlay-actions" style="flex-shrink:0;">
+    <div class="overlay-actions" style="flex-shrink:0;padding-top:4px;">
       <button class="ov-btn" id="settings-clear-btn">清除自定义</button>
       <button class="ov-btn primary" id="settings-save-btn">保存</button>
     </div>
@@ -726,12 +728,22 @@ $('optimize-btn').addEventListener('click', async () => {
     const result = await window.pywebview.api.optimize_prompt(draft, currentMode);
     if (result.error) {
       if (result.error === 'auth') updateConnectionUI(false);
-      showToast(result.message || '优化失败');
+      if (result.error === 'rate_limit') {
+        showToast('速率限制 — 正在打开设置，请配置自定义 API Key');
+        setTimeout(async () => {
+          const api = await window.pywebview.api.get_api_settings();
+          applyApiSettings({ ...api, oauth_connected: api.oauth_connected });
+          $('settings-overlay').style.display = 'flex';
+        }, 600);
+      } else {
+        showToast(result.message || '优化失败');
+      }
     } else {
       showResultOverlay(result.text);
     }
   } finally {
-    btn.disabled = !isConnected;
+    const hasCustom = !!($('settings-api-key').value || '').trim();
+    btn.disabled = !(isConnected || hasCustom);
     btn.innerHTML = '✨ 优化';
   }
 });
