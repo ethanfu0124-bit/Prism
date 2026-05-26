@@ -156,8 +156,12 @@ class PrismBackend:
                         continue
                     try:
                         obj = json.loads(line)
-                        role = obj.get("role") or obj.get("type", "")
-                        content = obj.get("content", "")
+                        obj_type = obj.get("type", "")
+                        if obj_type not in ("user", "assistant"):
+                            continue
+                        msg = obj.get("message") or {}
+                        role = msg.get("role", obj_type)
+                        content = msg.get("content", "")
                         if isinstance(content, list):
                             parts = []
                             for block in content:
@@ -177,7 +181,7 @@ class PrismBackend:
             return "（暂无对话上下文）"
         lines = []
         for m in self._context_messages:
-            role_label = "用户" if m["role"] == "human" else "Claude"
+            role_label = "用户" if m["role"] == "user" else "Claude"
             snippet = m["content"][:400]
             lines.append(f"[{role_label}]: {snippet}")
         return "\n".join(lines)
@@ -309,7 +313,7 @@ class PrismBackend:
 
         def call():
             try:
-                client = anthropic.Anthropic(api_key=self._oauth_token, base_url="https://api.anthropic.com")
+                client = anthropic.Anthropic(auth_token=self._oauth_token, base_url="https://api.anthropic.com")
                 response = client.messages.create(
                     model="claude-sonnet-4-5",
                     max_tokens=1024,
