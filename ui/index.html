@@ -620,10 +620,10 @@
 
   <!-- toast -->
   <div id="toast"></div>
-
-  <!-- model dropdown: position:fixed, rendered outside overlay overflow -->
-  <div id="model-dropdown" style="display:none;"></div>
 </div>
+
+<!-- model dropdown: direct child of body, escapes #app overflow:hidden -->
+<div id="model-dropdown" style="display:none;"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -830,9 +830,24 @@ function showModelDropdown() {
   }
 
   const rect = input.getBoundingClientRect();
-  dl.style.top  = (rect.bottom + 2) + 'px';
+  const winH = window.innerHeight;
+  const spaceBelow = winH - rect.bottom;
+  const maxH = 180;
+
   dl.style.left  = rect.left + 'px';
   dl.style.width = rect.width + 'px';
+
+  if (spaceBelow >= 80) {
+    dl.style.top        = (rect.bottom + 2) + 'px';
+    dl.style.bottom     = 'auto';
+    dl.style.maxHeight  = Math.min(maxH, spaceBelow - 6) + 'px';
+  } else {
+    // flip upward when below the input would be outside the window
+    dl.style.top        = 'auto';
+    dl.style.bottom     = (winH - rect.top + 2) + 'px';
+    dl.style.maxHeight  = Math.min(maxH, rect.top - 6) + 'px';
+  }
+
   dl.style.display = 'block';
 }
 
