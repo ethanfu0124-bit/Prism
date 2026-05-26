@@ -38,18 +38,22 @@ DEFAULT_CONFIG = {
 
 SYSTEM_PROMPTS = {
     "concise": (
-        "你是一个 prompt 优化专家。用户正在使用 Claude Code 进行编程，以下是他们当前的对话上下文：\n\n"
+        "你是一个 prompt 优化专家。用户正在使用 Claude Code 进行编程，以下是近期对话片段（仅作背景参考，不要在输出中引用）：\n\n"
         "{context}\n\n"
-        "请将用户的草稿 prompt 压缩为一条简短、精准的指令，去除冗余表达，保留核心意图。\n"
-        "要求：\n- 尽量简短，一两句话以内\n- 语言与用户草稿保持一致（中文/英文）\n"
-        "- 只输出优化后的 prompt，不要任何解释"
+        "请将用户的草稿 prompt 压缩为一条简短、精准的指令，去除冗余，保留核心意图。\n"
+        "输出要求：\n"
+        "- 直接输出优化后的 prompt 文本，不加任何前缀、解释、引号或元信息\n"
+        "- 一两句话以内\n"
+        "- 语言与草稿保持一致（中文/英文）"
     ),
     "detailed": (
-        "你是一个 prompt 优化专家。用户正在使用 Claude Code 进行编程，以下是他们当前的对话上下文：\n\n"
+        "你是一个 prompt 优化专家。用户正在使用 Claude Code 进行编程，以下是近期对话片段（仅作背景参考，不要在输出中引用）：\n\n"
         "{context}\n\n"
-        "请根据上下文，将用户提供的草稿 prompt 优化为一个更清晰、更具体、更易于 AI 理解的 prompt。\n"
-        "要求：\n- 保持用户的原始意图\n- 补充必要的上下文和约束条件\n"
-        "- 语言与用户草稿保持一致（中文/英文）\n- 只输出优化后的 prompt，不要任何解释"
+        "请将用户的草稿 prompt 优化为更清晰、更具体、更易于 AI 理解的指令。\n"
+        "输出要求：\n"
+        "- 直接输出优化后的 prompt 文本，不加任何前缀、解释、引号或元信息\n"
+        "- 保持原始意图，按需补充必要上下文和约束\n"
+        "- 语言与草稿保持一致（中文/英文）"
     ),
 }
 
@@ -189,7 +193,7 @@ class PrismBackend:
                         continue
         except Exception:
             pass
-        self._context_messages = messages[-10:]
+        self._context_messages = messages[-6:]
 
     def _build_context_string(self):
         if not self._context_messages:
@@ -197,7 +201,9 @@ class PrismBackend:
         lines = []
         for m in self._context_messages:
             role_label = "用户" if m["role"] == "user" else "Claude"
-            snippet = m["content"][:400]
+            limit = 300 if m["role"] == "user" else 120
+            text = m["content"]
+            snippet = text[:limit] + ("…" if len(text) > limit else "")
             lines.append(f"[{role_label}]: {snippet}")
         return "\n".join(lines)
 
@@ -310,16 +316,31 @@ class PrismBackend:
                         result["error"] = "no_token"
                         result["message"] = "无可用凭据"
                         return
-                    page = client.models.list()
-                    result["models"] = [m.id for m in page.data]
+                    try:
+                        page = client.models.list()
+                        result["models"] = [m.id for m in page.data]
+                    except AttributeError:
+                        result["error"] = "sdk_old"
+                        result["message"] = "请升级 anthropic 库（pip install -U anthropic）"
                 else:
                     resolved_url = base_url or _infer_base_url(api_key)
                     oa_client = _openai.OpenAI(api_key=api_key, base_url=resolved_url)
                     page = oa_client.models.list()
                     result["models"] = sorted([m.id for m in page.data])
+            except (anthropic.AuthenticationError, _openai.AuthenticationError):
+                result["error"] = "auth"
+                result["message"] = "API Key 无效"
+            except _openai.NotFoundError:
+                result["error"] = "not_supported"
+                result["message"] = "该接口不支持模型列表"
             except Exception as e:
-                result["error"] = "fetch_failed"
-                result["message"] = str(e)
+                msg = str(e)
+                if "404" in msg:
+                    result["error"] = "not_supported"
+                    result["message"] = "该接口不支持模型列表"
+                else:
+                    result["error"] = "fetch_failed"
+                    result["message"] = msg[:80]
 
         t = threading.Thread(target=call, daemon=True)
         t.start()

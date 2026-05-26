@@ -781,7 +781,8 @@ function setModelFetchStatus(state, info) {
     el.textContent = `✓ 已获取 ${info} 个可用模型`;
     el.style.color = '#22C55E';
   } else if (state === 'error') {
-    el.textContent = `获取失败，可手动输入`;
+    const detail = info ? `（${String(info).slice(0, 40)}）` : '';
+    el.textContent = `获取失败${detail}，可手动输入`;
     el.style.color = '#F59E0B';
   } else {
     el.textContent = '';
