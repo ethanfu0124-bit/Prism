@@ -450,6 +450,40 @@
     line-height: 1.4;
     transition: color 0.15s;
   }
+
+  /* ---- model dropdown (position:fixed escapes overlay overflow) ---- */
+  #model-dropdown {
+    position: fixed;
+    background: var(--bg);
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 300;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    padding: 3px 0;
+  }
+  .model-option {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .model-option:hover { background: var(--bg2); }
+  .model-option.active { background: var(--accent); color: #fff; }
+  .model-no-result {
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text2);
+    text-align: center;
+  }
+
   .settings-oauth-status {
     font-size: 11px;
     padding: 6px 8px;
@@ -570,15 +604,7 @@
         <div class="settings-label" style="margin-top:6px;">Base URL（非 Anthropic Key 时必填）</div>
         <input class="settings-input" type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" autocomplete="off">
         <div class="settings-label" style="margin-top:6px;">模型</div>
-        <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6" list="model-list">
-        <datalist id="model-list">
-          <option value="claude-sonnet-4-6">
-          <option value="claude-opus-4-7">
-          <option value="claude-haiku-4-5-20251001">
-          <option value="claude-sonnet-4-5">
-          <option value="deepseek-chat">
-          <option value="deepseek-reasoner">
-        </datalist>
+        <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6" autocomplete="off">
         <div id="model-fetch-status"></div>
       </div>
       <div class="settings-hint">
@@ -594,6 +620,9 @@
 
   <!-- toast -->
   <div id="toast"></div>
+
+  <!-- model dropdown: position:fixed, rendered outside overlay overflow -->
+  <div id="model-dropdown" style="display:none;"></div>
 </div>
 
 <script>
@@ -607,6 +636,7 @@ let dragOffX = 0, dragOffY = 0;
 let toastTimer = null;
 let modelFetchTimer = null;
 const STATIC_MODELS = ['claude-sonnet-4-6','claude-opus-4-7','claude-haiku-4-5-20251001','claude-sonnet-4-5','deepseek-chat','deepseek-reasoner'];
+let allModels = [...STATIC_MODELS];
 
 // ---- init
 window.addEventListener('pywebviewready', async () => {
@@ -707,10 +737,12 @@ $('settings-btn').addEventListener('click', async () => {
 });
 
 $('settings-close-btn').addEventListener('click', () => {
+  hideModelDropdown();
   $('settings-overlay').style.display = 'none';
 });
 
 $('settings-save-btn').addEventListener('click', async () => {
+  hideModelDropdown();
   const key = $('settings-api-key').value.trim();
   const model = $('settings-model').value.trim() || 'claude-sonnet-4-6';
   const baseUrl = $('settings-base-url').value.trim();
@@ -722,9 +754,11 @@ $('settings-save-btn').addEventListener('click', async () => {
 });
 
 $('settings-clear-btn').addEventListener('click', async () => {
+  hideModelDropdown();
   $('settings-api-key').value = '';
   $('settings-model').value = 'claude-sonnet-4-6';
   $('settings-base-url').value = '';
+  allModels = [...STATIC_MODELS];
   await window.pywebview.api.save_api_settings('', 'claude-sonnet-4-6', '');
   $('settings-overlay').style.display = 'none';
   $('optimize-btn').disabled = !isConnected;
@@ -762,14 +796,60 @@ async function doFetchModels() {
 }
 
 function populateModelList(models) {
-  const dl = $('model-list');
-  dl.innerHTML = '';
-  models.forEach(id => {
-    const opt = document.createElement('option');
-    opt.value = id;
-    dl.appendChild(opt);
-  });
+  allModels = models;
+  if ($('model-dropdown').style.display !== 'none') showModelDropdown();
 }
+
+function showModelDropdown() {
+  const input = $('settings-model');
+  const query = input.value.toLowerCase();
+  const filtered = query
+    ? allModels.filter(m => m.toLowerCase().includes(query))
+    : allModels;
+
+  const dl = $('model-dropdown');
+  dl.innerHTML = '';
+
+  if (filtered.length === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'model-no-result';
+    msg.textContent = '无匹配模型，可直接手动输入';
+    dl.appendChild(msg);
+  } else {
+    filtered.slice(0, 80).forEach(id => {
+      const opt = document.createElement('div');
+      opt.className = 'model-option';
+      opt.textContent = id;
+      opt.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = id;
+        hideModelDropdown();
+      });
+      dl.appendChild(opt);
+    });
+  }
+
+  const rect = input.getBoundingClientRect();
+  dl.style.top  = (rect.bottom + 2) + 'px';
+  dl.style.left  = rect.left + 'px';
+  dl.style.width = rect.width + 'px';
+  dl.style.display = 'block';
+}
+
+function hideModelDropdown() {
+  $('model-dropdown').style.display = 'none';
+}
+
+$('settings-model').addEventListener('focus', showModelDropdown);
+$('settings-model').addEventListener('input', showModelDropdown);
+$('settings-model').addEventListener('blur', () => setTimeout(hideModelDropdown, 160));
+$('settings-model').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { hideModelDropdown(); e.stopPropagation(); }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#settings-model, #model-dropdown')) hideModelDropdown();
+});
 
 function setModelFetchStatus(state, info) {
   const el = $('model-fetch-status');
