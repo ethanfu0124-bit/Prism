@@ -6,7 +6,10 @@ import webview
 
 from backend import PrismBackend
 
-UI_PATH = Path(__file__).parent / "ui" / "index.html"
+if getattr(sys, 'frozen', False):
+    UI_PATH = Path(sys._MEIPASS) / "ui" / "index.html"
+else:
+    UI_PATH = Path(__file__).parent / "ui" / "index.html"
 
 
 def main():
