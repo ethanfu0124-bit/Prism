@@ -492,6 +492,7 @@
       <span class="opacity-label">透明度</span>
       <input type="range" id="opacity-slider" min="60" max="100" value="100" step="1">
       <button id="minimize-btn" title="最小化">−</button>
+      <button id="about-btn" title="关于 Prism" style="width:20px;height:20px;border-radius:50%;background:#E5E5E5;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#888;font-size:11px;font-weight:700;transition:background 0.15s;-webkit-app-region:no-drag;">?</button>
     </div>
   </div>
 
@@ -542,6 +543,35 @@
       <button class="ov-btn" id="history-close-btn" style="padding:3px 10px;">关闭</button>
     </div>
     <div class="history-list" id="history-list"></div>
+  </div>
+
+  <!-- about overlay -->
+  <div class="overlay" id="about-overlay" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div class="overlay-title">关于 Prism</div>
+      <button class="ov-btn" id="about-close-btn" style="padding:3px 10px;">关闭</button>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <div style="text-align:center;">
+        <div style="font-size:28px;font-weight:800;background:linear-gradient(135deg,#D97756,#E8956D);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px;">Prism</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px;">v0.2.0</div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);text-align:center;line-height:1.6;">
+        Claude Code Prompt 优化工具<br>
+        实时读取对话上下文，一键将草稿优化为精准指令
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:11px;color:var(--text2);">支持的鉴权方式</div>
+        <div style="font-size:12px;color:var(--text);line-height:1.6;">
+          · Claude Code 本地 OAuth（自动读取）<br>
+          · Anthropic API Key（sk-ant-…）<br>
+          · OpenRouter / DeepSeek / 兼容 OpenAI 的服务
+        </div>
+      </div>
+      <div style="text-align:center;font-size:11px;color:var(--text2);">
+        github.com/ethanfu0124-bit/Prism
+      </div>
+    </div>
   </div>
 
   <!-- settings overlay -->
@@ -677,6 +707,14 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 $('minimize-btn').addEventListener('click', () => {
   // pywebview doesn't expose minimize directly via JS; use the API
   try { window.pywebview.api.minimize_window(); } catch(e) {}
+});
+
+// ---- about overlay
+$('about-btn').addEventListener('click', () => {
+  $('about-overlay').style.display = 'flex';
+});
+$('about-close-btn').addEventListener('click', () => {
+  $('about-overlay').style.display = 'none';
 });
 
 // ---- settings overlay
