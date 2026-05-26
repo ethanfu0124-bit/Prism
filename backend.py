@@ -302,6 +302,11 @@ class PrismBackend:
         _anthropic_base = base_url and base_url.rstrip("/").endswith("/anthropic")
         use_anthropic = (not api_key) or api_key.startswith("sk-ant-") or _anthropic_base
 
+        def _oai_list(key, oai_url):
+            oa = _openai.OpenAI(api_key=key, base_url=oai_url)
+            page = oa.models.list()
+            return sorted([m.id for m in page.data])
+
         def call():
             try:
                 if use_anthropic:
@@ -322,15 +327,26 @@ class PrismBackend:
                     except AttributeError:
                         result["error"] = "sdk_old"
                         result["message"] = "请升级 anthropic 库（pip install -U anthropic）"
+                    except Exception:
+                        # Third-party /anthropic endpoints (DeepSeek etc.) don't implement
+                        # Anthropic's GET /v1/models. Fall back to their OpenAI-compatible
+                        # sibling URL: strip /anthropic suffix, use /v1 instead.
+                        if _anthropic_base and api_key:
+                            oai_url = base_url.rstrip("/")[:-len("/anthropic")] + "/v1"
+                            try:
+                                result["models"] = _oai_list(api_key, oai_url)
+                                return
+                            except Exception:
+                                pass
+                        result["error"] = "not_supported"
+                        result["message"] = "该接口不支持模型列表"
                 else:
                     resolved_url = base_url or _infer_base_url(api_key)
-                    oa_client = _openai.OpenAI(api_key=api_key, base_url=resolved_url)
-                    page = oa_client.models.list()
-                    result["models"] = sorted([m.id for m in page.data])
+                    result["models"] = _oai_list(api_key, resolved_url)
             except (anthropic.AuthenticationError, _openai.AuthenticationError):
                 result["error"] = "auth"
                 result["message"] = "API Key 无效"
-            except _openai.NotFoundError:
+            except (_openai.NotFoundError, anthropic.NotFoundError):
                 result["error"] = "not_supported"
                 result["message"] = "该接口不支持模型列表"
             except Exception as e:
