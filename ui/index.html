@@ -444,46 +444,6 @@
     color: var(--text2);
     line-height: 1.4;
   }
-  #model-fetch-status {
-    font-size: 10px;
-    min-height: 14px;
-    line-height: 1.4;
-    transition: color 0.15s;
-  }
-
-  /* ---- model dropdown (position:fixed escapes overlay overflow) ---- */
-  #model-dropdown {
-    position: fixed;
-    background: var(--bg);
-    border: 1.5px solid var(--accent);
-    border-radius: 8px;
-    max-height: 180px;
-    overflow-y: auto;
-    z-index: 300;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-    padding: 3px 0;
-  }
-  .model-option {
-    padding: 6px 10px;
-    font-size: 12px;
-    color: var(--text);
-    cursor: pointer;
-    transition: background 0.1s;
-    user-select: none;
-    -webkit-user-select: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .model-option:hover { background: var(--bg2); }
-  .model-option.active { background: var(--accent); color: #fff; }
-  .model-no-result {
-    padding: 8px 10px;
-    font-size: 11px;
-    color: var(--text2);
-    text-align: center;
-  }
-
   .settings-oauth-status {
     font-size: 11px;
     padding: 6px 8px;
@@ -605,7 +565,6 @@
         <input class="settings-input" type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" autocomplete="off">
         <div class="settings-label" style="margin-top:6px;">模型</div>
         <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6" autocomplete="off">
-        <div id="model-fetch-status"></div>
       </div>
       <div class="settings-hint">
         Anthropic Key（sk-ant-…）自动走 Anthropic API，无需填 Base URL。<br>
@@ -622,8 +581,6 @@
   <div id="toast"></div>
 </div>
 
-<!-- model dropdown: direct child of body, escapes #app overflow:hidden -->
-<div id="model-dropdown" style="display:none;"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -634,9 +591,6 @@ let isConnected = false;
 let isDragging = false;
 let dragOffX = 0, dragOffY = 0;
 let toastTimer = null;
-let modelFetchTimer = null;
-const STATIC_MODELS = ['claude-sonnet-4-6','claude-opus-4-7','claude-haiku-4-5-20251001','claude-sonnet-4-5','deepseek-chat','deepseek-reasoner'];
-let allModels = [...STATIC_MODELS];
 
 // ---- init
 window.addEventListener('pywebviewready', async () => {
@@ -730,19 +684,13 @@ $('settings-btn').addEventListener('click', async () => {
   const api = await window.pywebview.api.get_api_settings();
   applyApiSettings({ ...api, oauth_connected: api.oauth_connected });
   $('settings-overlay').style.display = 'flex';
-  setModelFetchStatus('');
-  if (api.custom_api_key || isConnected) {
-    setTimeout(doFetchModels, 150);
-  }
 });
 
 $('settings-close-btn').addEventListener('click', () => {
-  hideModelDropdown();
   $('settings-overlay').style.display = 'none';
 });
 
 $('settings-save-btn').addEventListener('click', async () => {
-  hideModelDropdown();
   const key = $('settings-api-key').value.trim();
   const model = $('settings-model').value.trim() || 'claude-sonnet-4-6';
   const baseUrl = $('settings-base-url').value.trim();
@@ -754,135 +702,14 @@ $('settings-save-btn').addEventListener('click', async () => {
 });
 
 $('settings-clear-btn').addEventListener('click', async () => {
-  hideModelDropdown();
   $('settings-api-key').value = '';
   $('settings-model').value = 'claude-sonnet-4-6';
   $('settings-base-url').value = '';
-  allModels = [...STATIC_MODELS];
   await window.pywebview.api.save_api_settings('', 'claude-sonnet-4-6', '');
   $('settings-overlay').style.display = 'none';
   $('optimize-btn').disabled = !isConnected;
   showToast('已清除自定义 API Key');
 });
-
-// ---- model list fetch
-$('settings-api-key').addEventListener('input', () => {
-  clearTimeout(modelFetchTimer);
-  modelFetchTimer = setTimeout(doFetchModels, 800);
-});
-$('settings-base-url').addEventListener('input', () => {
-  clearTimeout(modelFetchTimer);
-  modelFetchTimer = setTimeout(doFetchModels, 800);
-});
-
-async function doFetchModels() {
-  const key = $('settings-api-key').value.trim();
-  const baseUrl = $('settings-base-url').value.trim();
-  if (!key && !isConnected) { setModelFetchStatus(''); return; }
-  setModelFetchStatus('loading');
-  try {
-    const result = await window.pywebview.api.fetch_models(key, baseUrl);
-    if (result.models && result.models.length > 0) {
-      populateModelList(result.models);
-      setModelFetchStatus('success', result.models.length);
-    } else {
-      populateModelList(STATIC_MODELS);
-      setModelFetchStatus('error', result.message || '接口不支持');
-    }
-  } catch(e) {
-    populateModelList(STATIC_MODELS);
-    setModelFetchStatus('error', '请求失败');
-  }
-}
-
-function populateModelList(models) {
-  allModels = models;
-  if ($('model-dropdown').style.display !== 'none') showModelDropdown();
-}
-
-function showModelDropdown() {
-  const input = $('settings-model');
-  const query = input.value.toLowerCase();
-  const filtered = query
-    ? allModels.filter(m => m.toLowerCase().includes(query))
-    : allModels;
-
-  const dl = $('model-dropdown');
-  dl.innerHTML = '';
-
-  if (filtered.length === 0) {
-    const msg = document.createElement('div');
-    msg.className = 'model-no-result';
-    msg.textContent = '无匹配模型，可直接手动输入';
-    dl.appendChild(msg);
-  } else {
-    filtered.slice(0, 80).forEach(id => {
-      const opt = document.createElement('div');
-      opt.className = 'model-option';
-      opt.textContent = id;
-      opt.addEventListener('mousedown', e => {
-        e.preventDefault();
-        input.value = id;
-        hideModelDropdown();
-      });
-      dl.appendChild(opt);
-    });
-  }
-
-  const rect = input.getBoundingClientRect();
-  const winH = window.innerHeight;
-  const spaceBelow = winH - rect.bottom;
-  const maxH = 180;
-
-  dl.style.left  = rect.left + 'px';
-  dl.style.width = rect.width + 'px';
-
-  if (spaceBelow >= 80) {
-    dl.style.top        = (rect.bottom + 2) + 'px';
-    dl.style.bottom     = 'auto';
-    dl.style.maxHeight  = Math.min(maxH, spaceBelow - 6) + 'px';
-  } else {
-    // flip upward when below the input would be outside the window
-    dl.style.top        = 'auto';
-    dl.style.bottom     = (winH - rect.top + 2) + 'px';
-    dl.style.maxHeight  = Math.min(maxH, rect.top - 6) + 'px';
-  }
-
-  dl.style.display = 'block';
-}
-
-function hideModelDropdown() {
-  $('model-dropdown').style.display = 'none';
-}
-
-$('settings-model').addEventListener('focus', showModelDropdown);
-$('settings-model').addEventListener('input', showModelDropdown);
-$('settings-model').addEventListener('blur', () => setTimeout(hideModelDropdown, 160));
-$('settings-model').addEventListener('keydown', e => {
-  if (e.key === 'Escape') { hideModelDropdown(); e.stopPropagation(); }
-});
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('#settings-model, #model-dropdown')) hideModelDropdown();
-});
-
-function setModelFetchStatus(state, info) {
-  const el = $('model-fetch-status');
-  if (!el) return;
-  if (state === 'loading') {
-    el.textContent = '正在获取模型列表…';
-    el.style.color = 'var(--text2)';
-  } else if (state === 'success') {
-    el.textContent = `✓ 已获取 ${info} 个可用模型`;
-    el.style.color = '#22C55E';
-  } else if (state === 'error') {
-    const detail = info ? `（${String(info).slice(0, 40)}）` : '';
-    el.textContent = `获取失败${detail}，可手动输入`;
-    el.style.color = '#F59E0B';
-  } else {
-    el.textContent = '';
-  }
-}
 
 // ---- refresh
 $('refresh-btn').addEventListener('click', async () => {
