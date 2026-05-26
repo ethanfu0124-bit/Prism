@@ -412,6 +412,49 @@
   }
   .history-restore-btn:hover { background: var(--accent); color: #fff; }
 
+  /* ---- settings overlay ---- */
+  #settings-overlay .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .settings-label {
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 1px;
+  }
+  .settings-input {
+    width: 100%;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-app-region: no-drag;
+  }
+  .settings-input:focus { border-color: var(--accent); }
+  .settings-hint {
+    font-size: 10px;
+    color: var(--text2);
+    line-height: 1.4;
+  }
+  .settings-oauth-status {
+    font-size: 11px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   /* ---- toast ---- */
   #toast {
     position: absolute;
@@ -474,6 +517,7 @@
       <span id="context-count"></span>
     </div>
     <div id="bottom-right">
+      <button class="icon-btn" id="settings-btn" title="API 设置">⚙</button>
       <button class="icon-btn" id="history-btn" title="优化历史">⏱</button>
       <button class="icon-btn" id="refresh-btn" title="刷新上下文">↻</button>
       <button id="optimize-btn" disabled>✨ 优化</button>
@@ -498,6 +542,32 @@
       <button class="ov-btn" id="history-close-btn" style="padding:3px 10px;">关闭</button>
     </div>
     <div class="history-list" id="history-list"></div>
+  </div>
+
+  <!-- settings overlay -->
+  <div class="overlay" id="settings-overlay" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div class="overlay-title">⚙ API 设置</div>
+      <button class="ov-btn" id="settings-close-btn" style="padding:3px 10px;">关闭</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">Claude Code 账户</div>
+      <div class="settings-oauth-status">
+        <div class="status-dot" id="settings-oauth-dot"></div>
+        <span id="settings-oauth-text">检测中…</span>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">自定义 API Key（留空则使用上方账户）</div>
+      <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-…" autocomplete="off">
+      <div class="settings-label" style="margin-top:4px;">模型</div>
+      <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6">
+    </div>
+    <div class="settings-hint">自定义 API Key 优先级高于 Claude Code 账户。</div>
+    <div class="overlay-actions" style="flex-shrink:0;">
+      <button class="ov-btn" id="settings-clear-btn">清除自定义</button>
+      <button class="ov-btn primary" id="settings-save-btn">保存</button>
+    </div>
   </div>
 
   <!-- toast -->
@@ -541,6 +611,24 @@ function applyInitialState(state) {
 
   // context
   updateContextStatus(state.project_label, state.context_count, state.fallback_mode);
+
+  // api settings
+  const api = state.api_settings || {};
+  applyApiSettings(api);
+}
+
+function applyApiSettings(api) {
+  $('settings-api-key').value = api.custom_api_key || '';
+  $('settings-model').value = api.custom_model || 'claude-sonnet-4-6';
+  const hasCustom = !!(api.custom_api_key || '').trim();
+  const oauthOk = api.oauth_connected !== false;
+  const dot = $('settings-oauth-dot');
+  const txt = $('settings-oauth-text');
+  dot.classList.toggle('red', !oauthOk);
+  txt.textContent = oauthOk ? '已连接' : '未检测到登录';
+  // enable optimize if either source is available
+  const canOptimize = hasCustom || isConnected;
+  $('optimize-btn').disabled = !canOptimize;
 }
 
 // ---- context status (called from Python too)
@@ -581,6 +669,38 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 $('minimize-btn').addEventListener('click', () => {
   // pywebview doesn't expose minimize directly via JS; use the API
   try { window.pywebview.api.minimize_window(); } catch(e) {}
+});
+
+// ---- settings overlay
+$('settings-btn').addEventListener('click', async () => {
+  const api = await window.pywebview.api.get_api_settings();
+  applyApiSettings({ ...api, oauth_connected: api.oauth_connected });
+  $('settings-overlay').style.display = 'flex';
+});
+
+$('settings-close-btn').addEventListener('click', () => {
+  $('settings-overlay').style.display = 'none';
+});
+
+$('settings-save-btn').addEventListener('click', async () => {
+  const key = $('settings-api-key').value.trim();
+  const model = $('settings-model').value.trim() || 'claude-sonnet-4-6';
+  await window.pywebview.api.save_api_settings(key, model);
+  $('settings-overlay').style.display = 'none';
+  const hasCustom = !!key;
+  if (hasCustom || isConnected) {
+    $('optimize-btn').disabled = false;
+  }
+  showToast(hasCustom ? '已保存自定义 API Key' : '已清除自定义 API Key，使用 Claude Code 账户');
+});
+
+$('settings-clear-btn').addEventListener('click', async () => {
+  $('settings-api-key').value = '';
+  $('settings-model').value = 'claude-sonnet-4-6';
+  await window.pywebview.api.save_api_settings('', 'claude-sonnet-4-6');
+  $('settings-overlay').style.display = 'none';
+  $('optimize-btn').disabled = !isConnected;
+  showToast('已清除自定义 API Key');
 });
 
 // ---- refresh

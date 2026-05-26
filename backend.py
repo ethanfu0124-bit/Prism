@@ -19,6 +19,8 @@ DEFAULT_CONFIG = {
     "window_y": 100,
     "opacity": 1.0,
     "optimize_mode": "detailed",
+    "custom_api_key": "",
+    "custom_model": "claude-sonnet-4-6",
 }
 
 SYSTEM_PROMPTS = {
@@ -251,7 +253,24 @@ class PrismBackend:
             "project_label": self._get_project_label(),
             "context_count": len(self._context_messages),
             "fallback_mode": self._fallback_mode,
+            "api_settings": {
+                "custom_api_key": self._config.get("custom_api_key", ""),
+                "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
+            },
         }
+
+    def get_api_settings(self):
+        return {
+            "custom_api_key": self._config.get("custom_api_key", ""),
+            "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
+            "oauth_connected": self._oauth_token is not None,
+        }
+
+    def save_api_settings(self, custom_api_key, custom_model):
+        self._config["custom_api_key"] = custom_api_key.strip()
+        self._config["custom_model"] = custom_model.strip() or "claude-sonnet-4-6"
+        self._save_config()
+        return {"ok": True}
 
     def save_window_position(self, x, y):
         self._config["window_x"] = x
@@ -301,8 +320,11 @@ class PrismBackend:
         }
 
     def optimize_prompt(self, draft, mode):
-        if not self._oauth_token:
-            return {"error": "no_token", "message": "未检测到 Claude 登录信息，请先启动 Claude Code 并完成登录"}
+        custom_key = self._config.get("custom_api_key", "").strip()
+        model = self._config.get("custom_model", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+
+        if not custom_key and not self._oauth_token:
+            return {"error": "no_token", "message": "未检测到登录信息，请在设置中配置 API Key 或启动 Claude Code 完成登录"}
 
         context_str = self._build_context_string()
         system_template = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["detailed"])
@@ -313,21 +335,37 @@ class PrismBackend:
 
         def call():
             try:
-                client = anthropic.Anthropic(auth_token=self._oauth_token, base_url="https://api.anthropic.com")
+                if custom_key:
+                    client = anthropic.Anthropic(api_key=custom_key, base_url="https://api.anthropic.com")
+                else:
+                    client = anthropic.Anthropic(auth_token=self._oauth_token, base_url="https://api.anthropic.com")
+
                 response = client.messages.create(
-                    model="claude-sonnet-4-5",
+                    model=model,
                     max_tokens=1024,
                     system=system,
                     messages=[{"role": "user", "content": draft}],
-                    timeout=15,
+                    timeout=30,
                 )
                 if self._api_cancel_event.is_set():
                     result["cancelled"] = True
                     return
-                result["text"] = response.content[0].text
+                blocks = response.content
+                text = next((b.text for b in blocks if hasattr(b, "text")), "")
+                if not text:
+                    result["error"] = "api"
+                    result["message"] = "API 返回内容为空，请重试"
+                    return
+                result["text"] = text
             except anthropic.AuthenticationError:
                 result["error"] = "auth"
-                result["message"] = "登录已过期，请重启 Claude Code 重新登录"
+                result["message"] = "认证失败，请检查 API Key 是否正确，或重启 Claude Code 重新登录"
+            except anthropic.RateLimitError:
+                result["error"] = "rate_limit"
+                result["message"] = "触发速率限制，请稍后重试，或在设置中配置自定义 API Key"
+            except anthropic.BadRequestError as e:
+                result["error"] = "api"
+                result["message"] = f"请求参数错误：{e}"
             except Exception as e:
                 msg = str(e)
                 if "timeout" in msg.lower() or "timed out" in msg.lower():
@@ -339,14 +377,14 @@ class PrismBackend:
 
         t = threading.Thread(target=call, daemon=True)
         t.start()
-        t.join(timeout=16)
+        t.join(timeout=32)
 
         if t.is_alive():
             self._api_cancel_event.set()
             return {"error": "timeout", "message": "请求超时，请重试"}
 
         if result.get("cancelled"):
-            return {"error": "timeout", "message": "请求超时，请重试"}
+            return {"error": "cancelled", "message": "已取消"}
 
         if "text" in result:
             self._save_history(draft, result["text"], mode)
