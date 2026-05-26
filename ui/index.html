@@ -150,6 +150,7 @@
     width: 100%;
     min-height: 0;
     resize: none;
+    user-select: text;
     border: 1.5px solid var(--border);
     border-radius: 8px;
     background: var(--bg2);
@@ -196,6 +197,11 @@
     font-size: 11px;
     color: var(--text2);
     white-space: nowrap;
+  }
+  #context-count:not(:empty) {
+    border-left: 1px solid var(--border);
+    padding-left: 6px;
+    margin-left: 2px;
   }
 
   #fallback-badge {
@@ -532,7 +538,7 @@ function applyInitialState(state) {
 // ---- context status (called from Python too)
 window.updateContextStatus = function(label, count, fallback) {
   $('project-label').textContent = label || '未检测到项目';
-  $('context-count').textContent = count > 0 ? `· 已读取 ${count} 条上下文` : '';
+  $('context-count').textContent = count > 0 ? `已读取 ${count} 条上下文` : '';
   $('fallback-badge').style.display = fallback ? 'inline-flex' : 'none';
 };
 

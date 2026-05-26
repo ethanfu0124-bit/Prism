@@ -9,7 +9,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-CREDENTIALS_PATH = Path.home() / ".claude" / "credentials.json"
+CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 PRISM_CWD_PATH = Path.home() / ".prism_cwd"
 PRISM_CONFIG_PATH = Path.home() / ".prism_config.json"
 PRISM_HISTORY_PATH = Path.home() / ".prism_history.json"
