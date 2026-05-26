@@ -1,5 +1,4 @@
 import json
-import os
 import threading
 import time
 from datetime import datetime
@@ -9,8 +8,7 @@ import anthropic
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-APPDATA = os.environ.get("APPDATA", "")
-CLAUDE_PROJECTS_DIR = Path(APPDATA) / "Claude" / "projects"
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 CREDENTIALS_PATH = Path.home() / ".claude" / "credentials.json"
 PRISM_CWD_PATH = Path.home() / ".prism_cwd"
 PRISM_CONFIG_PATH = Path.home() / ".prism_config.json"
