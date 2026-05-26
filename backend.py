@@ -83,7 +83,8 @@ class PrismBackend:
         try:
             with open(CREDENTIALS_PATH, encoding="utf-8") as f:
                 data = json.load(f)
-            token = data.get("claudeAiOauthToken", "")
+            oauth = data.get("claudeAiOauth") or {}
+            token = oauth.get("accessToken", "")
             if token:
                 self._oauth_token = token
         except Exception:
