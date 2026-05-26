@@ -22,6 +22,7 @@ def main():
         x=cfg.get("window_x", 100),
         y=cfg.get("window_y", 100),
         frameless=True,
+        easy_drag=False,
         on_top=True,
         background_color="#F9F7F4",
         min_size=(320, 180),

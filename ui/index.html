@@ -50,15 +50,14 @@
     height: 36px;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
-    -webkit-app-region: drag;
     flex-shrink: 0;
+    cursor: grab;
   }
 
   #drag-bar .left {
     display: flex;
     align-items: center;
     gap: 6px;
-    -webkit-app-region: drag;
   }
 
   #app-name {
@@ -709,10 +708,12 @@ function setupDrag() {
   const bar = $('drag-bar');
 
   bar.addEventListener('mousedown', e => {
-    if (e.target.closest('input, button')) return;
+    if (e.target.closest('input, button, textarea, select')) return;
     isDragging = true;
     dragOffX = e.screenX;
     dragOffY = e.screenY;
+    bar.style.cursor = 'grabbing';
+    e.preventDefault();
   });
 
   document.addEventListener('mousemove', async e => {
@@ -729,6 +730,7 @@ function setupDrag() {
   document.addEventListener('mouseup', async () => {
     if (!isDragging) return;
     isDragging = false;
+    bar.style.cursor = '';
     try {
       const pos = await window.pywebview.api.get_window_position();
       if (pos) {
