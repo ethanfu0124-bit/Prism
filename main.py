@@ -17,15 +17,15 @@ def main():
         title="Prism",
         url=str(UI_PATH),
         js_api=backend,
-        width=380,
-        height=220,
+        width=440,
+        height=300,
         x=cfg.get("window_x", 100),
         y=cfg.get("window_y", 100),
         frameless=True,
         easy_drag=False,
         on_top=True,
         background_color="#F9F7F4",
-        min_size=(320, 180),
+        min_size=(360, 240),
     )
 
     backend.set_window(window)

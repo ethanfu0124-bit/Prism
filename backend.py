@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import anthropic
+import openai as _openai
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -14,6 +15,17 @@ PRISM_CWD_PATH = Path.home() / ".prism_cwd"
 PRISM_CONFIG_PATH = Path.home() / ".prism_config.json"
 PRISM_HISTORY_PATH = Path.home() / ".prism_history.json"
 
+_BASE_URL_MAP = {
+    "sk-": "https://api.deepseek.com",
+    "sk-or-": "https://openrouter.ai/api/v1",
+}
+
+def _infer_base_url(key: str) -> str:
+    for prefix, url in _BASE_URL_MAP.items():
+        if key.startswith(prefix):
+            return url
+    return "https://api.openai.com/v1"
+
 DEFAULT_CONFIG = {
     "window_x": 100,
     "window_y": 100,
@@ -21,6 +33,7 @@ DEFAULT_CONFIG = {
     "optimize_mode": "detailed",
     "custom_api_key": "",
     "custom_model": "claude-sonnet-4-6",
+    "custom_base_url": "",
 }
 
 SYSTEM_PROMPTS = {
@@ -256,6 +269,8 @@ class PrismBackend:
             "api_settings": {
                 "custom_api_key": self._config.get("custom_api_key", ""),
                 "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
+                "custom_base_url": self._config.get("custom_base_url", ""),
+                "oauth_connected": self._oauth_token is not None,
             },
         }
 
@@ -263,12 +278,14 @@ class PrismBackend:
         return {
             "custom_api_key": self._config.get("custom_api_key", ""),
             "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
+            "custom_base_url": self._config.get("custom_base_url", ""),
             "oauth_connected": self._oauth_token is not None,
         }
 
-    def save_api_settings(self, custom_api_key, custom_model):
+    def save_api_settings(self, custom_api_key, custom_model, custom_base_url=""):
         self._config["custom_api_key"] = custom_api_key.strip()
         self._config["custom_model"] = custom_model.strip() or "claude-sonnet-4-6"
+        self._config["custom_base_url"] = custom_base_url.strip()
         self._save_config()
         return {"ok": True}
 
@@ -333,37 +350,57 @@ class PrismBackend:
         self._api_cancel_event.clear()
         result = {}
 
+        base_url = self._config.get("custom_base_url", "").strip()
+        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-")
+
         def call():
             try:
-                if custom_key:
-                    client = anthropic.Anthropic(api_key=custom_key, base_url="https://api.anthropic.com")
+                if use_anthropic:
+                    if custom_key:
+                        client = anthropic.Anthropic(api_key=custom_key)
+                    else:
+                        client = anthropic.Anthropic(auth_token=self._oauth_token)
+                    response = client.messages.create(
+                        model=model,
+                        max_tokens=1024,
+                        system=system,
+                        messages=[{"role": "user", "content": draft}],
+                        timeout=30,
+                    )
+                    if self._api_cancel_event.is_set():
+                        result["cancelled"] = True
+                        return
+                    text = next((b.text for b in response.content if hasattr(b, "text")), "")
                 else:
-                    client = anthropic.Anthropic(auth_token=self._oauth_token, base_url="https://api.anthropic.com")
+                    resolved_url = base_url or _infer_base_url(custom_key)
+                    oa_client = _openai.OpenAI(api_key=custom_key, base_url=resolved_url)
+                    response = oa_client.chat.completions.create(
+                        model=model,
+                        max_tokens=1024,
+                        messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": draft},
+                        ],
+                        timeout=30,
+                    )
+                    if self._api_cancel_event.is_set():
+                        result["cancelled"] = True
+                        return
+                    text = (response.choices[0].message.content or "").strip()
 
-                response = client.messages.create(
-                    model=model,
-                    max_tokens=1024,
-                    system=system,
-                    messages=[{"role": "user", "content": draft}],
-                    timeout=30,
-                )
-                if self._api_cancel_event.is_set():
-                    result["cancelled"] = True
-                    return
-                blocks = response.content
-                text = next((b.text for b in blocks if hasattr(b, "text")), "")
                 if not text:
                     result["error"] = "api"
                     result["message"] = "API 返回内容为空，请重试"
                     return
                 result["text"] = text
-            except anthropic.AuthenticationError:
+
+            except (anthropic.AuthenticationError, _openai.AuthenticationError):
                 result["error"] = "auth"
-                result["message"] = "认证失败，请检查 API Key 是否正确，或重启 Claude Code 重新登录"
-            except anthropic.RateLimitError:
+                result["message"] = "认证失败，请检查 API Key 是否正确"
+            except (anthropic.RateLimitError, _openai.RateLimitError):
                 result["error"] = "rate_limit"
                 result["message"] = "触发速率限制，请稍后重试，或在设置中配置自定义 API Key"
-            except anthropic.BadRequestError as e:
+            except (anthropic.BadRequestError, _openai.BadRequestError) as e:
                 result["error"] = "api"
                 result["message"] = f"请求参数错误：{e}"
             except Exception as e:

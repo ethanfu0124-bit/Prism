@@ -560,11 +560,24 @@
       </div>
       <div class="settings-section">
         <div class="settings-label">自定义 API Key（留空则使用上方账户）</div>
-        <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-…" autocomplete="off">
+        <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-… / sk-…" autocomplete="off">
         <div class="settings-label" style="margin-top:6px;">模型</div>
-        <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6">
+        <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6" list="model-list">
+        <datalist id="model-list">
+          <option value="claude-sonnet-4-6">
+          <option value="claude-opus-4-7">
+          <option value="claude-haiku-4-5-20251001">
+          <option value="claude-sonnet-4-5">
+          <option value="deepseek-chat">
+          <option value="deepseek-reasoner">
+        </datalist>
+        <div class="settings-label" style="margin-top:6px;">Base URL（非 Anthropic Key 时必填）</div>
+        <input class="settings-input" type="text" id="settings-base-url" placeholder="https://api.deepseek.com" autocomplete="off">
       </div>
-      <div class="settings-hint">自定义 API Key 优先级高于 Claude Code 账户。<br>获取 API Key：<span style="color:var(--accent);">console.anthropic.com</span></div>
+      <div class="settings-hint">
+        Anthropic Key（sk-ant-…）自动走 Anthropic API，无需填 Base URL。<br>
+        其他 Key（DeepSeek、OpenRouter 等）需填对应 Base URL。
+      </div>
     </div>
     <div class="overlay-actions" style="flex-shrink:0;padding-top:4px;">
       <button class="ov-btn" id="settings-clear-btn">清除自定义</button>
@@ -622,13 +635,13 @@ function applyInitialState(state) {
 function applyApiSettings(api) {
   $('settings-api-key').value = api.custom_api_key || '';
   $('settings-model').value = api.custom_model || 'claude-sonnet-4-6';
+  $('settings-base-url').value = api.custom_base_url || '';
   const hasCustom = !!(api.custom_api_key || '').trim();
   const oauthOk = api.oauth_connected !== false;
   const dot = $('settings-oauth-dot');
   const txt = $('settings-oauth-text');
   dot.classList.toggle('red', !oauthOk);
   txt.textContent = oauthOk ? '已连接' : '未检测到登录';
-  // enable optimize if either source is available
   const canOptimize = hasCustom || isConnected;
   $('optimize-btn').disabled = !canOptimize;
 }
@@ -687,19 +700,19 @@ $('settings-close-btn').addEventListener('click', () => {
 $('settings-save-btn').addEventListener('click', async () => {
   const key = $('settings-api-key').value.trim();
   const model = $('settings-model').value.trim() || 'claude-sonnet-4-6';
-  await window.pywebview.api.save_api_settings(key, model);
+  const baseUrl = $('settings-base-url').value.trim();
+  await window.pywebview.api.save_api_settings(key, model, baseUrl);
   $('settings-overlay').style.display = 'none';
   const hasCustom = !!key;
-  if (hasCustom || isConnected) {
-    $('optimize-btn').disabled = false;
-  }
-  showToast(hasCustom ? '已保存自定义 API Key' : '已清除自定义 API Key，使用 Claude Code 账户');
+  $('optimize-btn').disabled = !(hasCustom || isConnected);
+  showToast(hasCustom ? '已保存' : '已清除自定义 API Key，使用 Claude Code 账户');
 });
 
 $('settings-clear-btn').addEventListener('click', async () => {
   $('settings-api-key').value = '';
   $('settings-model').value = 'claude-sonnet-4-6';
-  await window.pywebview.api.save_api_settings('', 'claude-sonnet-4-6');
+  $('settings-base-url').value = '';
+  await window.pywebview.api.save_api_settings('', 'claude-sonnet-4-6', '');
   $('settings-overlay').style.display = 'none';
   $('optimize-btn').disabled = !isConnected;
   showToast('已清除自定义 API Key');
