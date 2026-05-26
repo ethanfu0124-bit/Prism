@@ -289,6 +289,45 @@ class PrismBackend:
         self._save_config()
         return {"ok": True}
 
+    def fetch_models(self, api_key="", base_url=""):
+        api_key = (api_key or "").strip()
+        base_url = (base_url or "").strip()
+        result = {}
+        _anthropic_base = base_url and base_url.rstrip("/").endswith("/anthropic")
+        use_anthropic = (not api_key) or api_key.startswith("sk-ant-") or _anthropic_base
+
+        def call():
+            try:
+                if use_anthropic:
+                    if api_key:
+                        kwargs = {"api_key": api_key}
+                        if base_url:
+                            kwargs["base_url"] = base_url
+                        client = anthropic.Anthropic(**kwargs)
+                    elif self._oauth_token:
+                        client = anthropic.Anthropic(auth_token=self._oauth_token)
+                    else:
+                        result["error"] = "no_token"
+                        result["message"] = "无可用凭据"
+                        return
+                    page = client.models.list()
+                    result["models"] = [m.id for m in page.data]
+                else:
+                    resolved_url = base_url or _infer_base_url(api_key)
+                    oa_client = _openai.OpenAI(api_key=api_key, base_url=resolved_url)
+                    page = oa_client.models.list()
+                    result["models"] = sorted([m.id for m in page.data])
+            except Exception as e:
+                result["error"] = "fetch_failed"
+                result["message"] = str(e)
+
+        t = threading.Thread(target=call, daemon=True)
+        t.start()
+        t.join(timeout=8)
+        if t.is_alive():
+            return {"error": "timeout", "message": "获取超时"}
+        return result
+
     def save_window_position(self, x, y):
         self._config["window_x"] = x
         self._config["window_y"] = y

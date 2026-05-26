@@ -444,6 +444,12 @@
     color: var(--text2);
     line-height: 1.4;
   }
+  #model-fetch-status {
+    font-size: 10px;
+    min-height: 14px;
+    line-height: 1.4;
+    transition: color 0.15s;
+  }
   .settings-oauth-status {
     font-size: 11px;
     padding: 6px 8px;
@@ -573,6 +579,7 @@
           <option value="deepseek-chat">
           <option value="deepseek-reasoner">
         </datalist>
+        <div id="model-fetch-status"></div>
       </div>
       <div class="settings-hint">
         Anthropic Key（sk-ant-…）自动走 Anthropic API，无需填 Base URL。<br>
@@ -598,6 +605,8 @@ let isConnected = false;
 let isDragging = false;
 let dragOffX = 0, dragOffY = 0;
 let toastTimer = null;
+let modelFetchTimer = null;
+const STATIC_MODELS = ['claude-sonnet-4-6','claude-opus-4-7','claude-haiku-4-5-20251001','claude-sonnet-4-5','deepseek-chat','deepseek-reasoner'];
 
 // ---- init
 window.addEventListener('pywebviewready', async () => {
@@ -691,6 +700,10 @@ $('settings-btn').addEventListener('click', async () => {
   const api = await window.pywebview.api.get_api_settings();
   applyApiSettings({ ...api, oauth_connected: api.oauth_connected });
   $('settings-overlay').style.display = 'flex';
+  setModelFetchStatus('');
+  if (api.custom_api_key || isConnected) {
+    setTimeout(doFetchModels, 150);
+  }
 });
 
 $('settings-close-btn').addEventListener('click', () => {
@@ -717,6 +730,63 @@ $('settings-clear-btn').addEventListener('click', async () => {
   $('optimize-btn').disabled = !isConnected;
   showToast('已清除自定义 API Key');
 });
+
+// ---- model list fetch
+$('settings-api-key').addEventListener('input', () => {
+  clearTimeout(modelFetchTimer);
+  modelFetchTimer = setTimeout(doFetchModels, 800);
+});
+$('settings-base-url').addEventListener('input', () => {
+  clearTimeout(modelFetchTimer);
+  modelFetchTimer = setTimeout(doFetchModels, 800);
+});
+
+async function doFetchModels() {
+  const key = $('settings-api-key').value.trim();
+  const baseUrl = $('settings-base-url').value.trim();
+  if (!key && !isConnected) { setModelFetchStatus(''); return; }
+  setModelFetchStatus('loading');
+  try {
+    const result = await window.pywebview.api.fetch_models(key, baseUrl);
+    if (result.models && result.models.length > 0) {
+      populateModelList(result.models);
+      setModelFetchStatus('success', result.models.length);
+    } else {
+      populateModelList(STATIC_MODELS);
+      setModelFetchStatus('error', result.message || '接口不支持');
+    }
+  } catch(e) {
+    populateModelList(STATIC_MODELS);
+    setModelFetchStatus('error', '请求失败');
+  }
+}
+
+function populateModelList(models) {
+  const dl = $('model-list');
+  dl.innerHTML = '';
+  models.forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    dl.appendChild(opt);
+  });
+}
+
+function setModelFetchStatus(state, info) {
+  const el = $('model-fetch-status');
+  if (!el) return;
+  if (state === 'loading') {
+    el.textContent = '正在获取模型列表…';
+    el.style.color = 'var(--text2)';
+  } else if (state === 'success') {
+    el.textContent = `✓ 已获取 ${info} 个可用模型`;
+    el.style.color = '#22C55E';
+  } else if (state === 'error') {
+    el.textContent = `获取失败，可手动输入`;
+    el.style.color = '#F59E0B';
+  } else {
+    el.textContent = '';
+  }
+}
 
 // ---- refresh
 $('refresh-btn').addEventListener('click', async () => {
