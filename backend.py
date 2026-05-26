@@ -10,20 +10,13 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 PRISM_CWD_PATH = Path.home() / ".prism_cwd"
 PRISM_CONFIG_PATH = Path.home() / ".prism_config.json"
 PRISM_HISTORY_PATH = Path.home() / ".prism_history.json"
 
-_BASE_URL_MAP = [
-    ("sk-or-",  "https://openrouter.ai/api/v1"),
-    ("sk-",     "https://api.deepseek.com/v1"),
-]
-
 def _infer_base_url(key: str) -> str:
-    for prefix, url in _BASE_URL_MAP:
-        if key.startswith(prefix):
-            return url
+    if key.startswith("sk-or-"):
+        return "https://openrouter.ai/api/v1"
     return "https://api.openai.com/v1"
 
 DEFAULT_CONFIG = {
@@ -71,6 +64,7 @@ class PrismBackend:
         self._cwd_handler = None
         self._jsonl_handler = None
         self._api_cancel_event = threading.Event()
+        self._optimize_lock = threading.Lock()
         self._jsonl_watch = None
 
         self._load_credentials()
@@ -99,15 +93,22 @@ class PrismBackend:
     # ------------------------------------------------------------------ credentials
 
     def _load_credentials(self):
-        try:
-            with open(CREDENTIALS_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-            oauth = data.get("claudeAiOauth") or {}
-            token = oauth.get("accessToken", "")
-            if token:
-                self._oauth_token = token
-        except Exception:
-            self._oauth_token = None
+        candidates = [
+            Path.home() / ".claude" / ".credentials.json",
+            Path.home() / ".claude" / "credentials.json",
+        ]
+        for path in candidates:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                oauth = data.get("claudeAiOauth") or {}
+                token = oauth.get("accessToken") or data.get("claudeAiOauthToken", "")
+                if token:
+                    self._oauth_token = token
+                    return
+            except Exception:
+                continue
+        self._oauth_token = None
 
     # ------------------------------------------------------------------ project context
 
@@ -200,7 +201,7 @@ class PrismBackend:
             return "（暂无对话上下文）"
         lines = []
         for m in self._context_messages:
-            role_label = "用户" if m["role"] == "user" else "Claude"
+            role_label = "用户" if m["role"] in ("user", "human") else "Claude"
             limit = 300 if m["role"] == "user" else 120
             text = m["content"]
             snippet = text[:limit] + ("…" if len(text) > limit else "")
@@ -265,6 +266,14 @@ class PrismBackend:
 
     # ------------------------------------------------------------------ pywebview API
 
+    def get_api_settings(self):
+        return {
+            "custom_api_key": self._config.get("custom_api_key", ""),
+            "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
+            "custom_base_url": self._config.get("custom_base_url", ""),
+            "oauth_connected": self._oauth_token is not None,
+        }
+
     def get_initial_state(self):
         return {
             "config": self._config,
@@ -272,20 +281,7 @@ class PrismBackend:
             "project_label": self._get_project_label(),
             "context_count": len(self._context_messages),
             "fallback_mode": self._fallback_mode,
-            "api_settings": {
-                "custom_api_key": self._config.get("custom_api_key", ""),
-                "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
-                "custom_base_url": self._config.get("custom_base_url", ""),
-                "oauth_connected": self._oauth_token is not None,
-            },
-        }
-
-    def get_api_settings(self):
-        return {
-            "custom_api_key": self._config.get("custom_api_key", ""),
-            "custom_model": self._config.get("custom_model", "claude-sonnet-4-6"),
-            "custom_base_url": self._config.get("custom_base_url", ""),
-            "oauth_connected": self._oauth_token is not None,
+            "api_settings": self.get_api_settings(),
         }
 
     def save_api_settings(self, custom_api_key, custom_model, custom_base_url=""):
@@ -343,6 +339,14 @@ class PrismBackend:
         }
 
     def optimize_prompt(self, draft, mode):
+        if not self._optimize_lock.acquire(blocking=False):
+            return {"error": "busy", "message": "已有优化请求在处理中，请稍等"}
+        try:
+            return self._run_optimize(draft, mode)
+        finally:
+            self._optimize_lock.release()
+
+    def _run_optimize(self, draft, mode):
         custom_key = self._config.get("custom_api_key", "").strip()
         model = self._config.get("custom_model", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
 
@@ -350,15 +354,12 @@ class PrismBackend:
             return {"error": "no_token", "message": "未检测到登录信息，请在设置中配置 API Key 或启动 Claude Code 完成登录"}
 
         context_str = self._build_context_string()
-        system_template = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["detailed"])
-        system = system_template.replace("{context}", context_str)
+        system = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["detailed"]).replace("{context}", context_str)
 
         self._api_cancel_event.clear()
         result = {}
-
         base_url = self._config.get("custom_base_url", "").strip()
-        _anthropic_base = base_url and base_url.rstrip("/").endswith("/anthropic")
-        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-") or _anthropic_base
+        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-")
 
         def call():
             try:
@@ -436,7 +437,7 @@ class PrismBackend:
         if "text" in result:
             self._save_history(draft, result["text"], mode)
 
-        if result.get("error") == "auth":
+        if result.get("error") == "auth" and not custom_key:
             self._oauth_token = None
 
         return result

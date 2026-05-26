@@ -635,8 +635,7 @@ function applyApiSettings(api) {
   const txt = $('settings-oauth-text');
   dot.classList.toggle('red', !oauthOk);
   txt.textContent = oauthOk ? '已连接' : '未检测到登录';
-  const canOptimize = hasCustom || isConnected;
-  $('optimize-btn').disabled = !canOptimize;
+  $('optimize-btn').disabled = !(hasCustom || oauthOk);
 }
 
 // ---- context status (called from Python too)
@@ -650,8 +649,9 @@ function updateConnectionUI(connected) {
   isConnected = connected;
   const dot = $('status-dot');
   dot.classList.toggle('red', !connected);
-  $('optimize-btn').disabled = !connected;
-  if (!connected) {
+  const hasCustom = !!($('settings-api-key').value || '').trim();
+  $('optimize-btn').disabled = !(connected || hasCustom);
+  if (!connected && !hasCustom) {
     $('project-label').textContent = '未登录 — 请启动 Claude Code 完成登录';
   }
 }
@@ -734,7 +734,9 @@ $('optimize-btn').addEventListener('click', async () => {
     const result = await window.pywebview.api.optimize_prompt(draft, currentMode);
     if (result.error) {
       if (result.error === 'auth') updateConnectionUI(false);
-      if (result.error === 'rate_limit') {
+      if (result.error === 'cancelled') {
+        // silent — race-condition cancel, no user action needed
+      } else if (result.error === 'rate_limit') {
         showToast('速率限制 — 正在打开设置，请配置自定义 API Key');
         setTimeout(async () => {
           const api = await window.pywebview.api.get_api_settings();
