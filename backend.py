@@ -328,6 +328,13 @@ class PrismBackend:
             except Exception:
                 pass
 
+    def close_window(self):
+        if self._window:
+            try:
+                self._window.destroy()
+            except Exception:
+                pass
+
     def refresh_context(self):
         self._load_credentials()
         self._init_project_context()

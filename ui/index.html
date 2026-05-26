@@ -107,6 +107,24 @@
   }
   #minimize-btn:hover { background: #D0D0D0; }
 
+  #close-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #E5E5E5;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+    -webkit-app-region: no-drag;
+  }
+  #close-btn:hover { background: #EF4444; color: #fff; }
+
   /* ---- mode selector ---- */
   #mode-bar {
     display: flex;
@@ -492,6 +510,7 @@
       <span class="opacity-label">透明度</span>
       <input type="range" id="opacity-slider" min="60" max="100" value="100" step="1">
       <button id="minimize-btn" title="最小化">−</button>
+      <button id="close-btn" title="关闭">×</button>
       <button id="about-btn" title="关于 Prism" style="width:20px;height:20px;border-radius:50%;background:#E5E5E5;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#888;font-size:11px;font-weight:700;transition:background 0.15s;-webkit-app-region:no-drag;">?</button>
     </div>
   </div>
@@ -703,10 +722,12 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
-// ---- minimize
+// ---- minimize / close
 $('minimize-btn').addEventListener('click', () => {
-  // pywebview doesn't expose minimize directly via JS; use the API
   try { window.pywebview.api.minimize_window(); } catch(e) {}
+});
+$('close-btn').addEventListener('click', () => {
+  try { window.pywebview.api.close_window(); } catch(e) {}
 });
 
 // ---- about overlay
