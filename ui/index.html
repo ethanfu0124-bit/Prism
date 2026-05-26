@@ -662,16 +662,16 @@ function applyInitialState(state) {
     b.classList.toggle('active', b.dataset.mode === currentMode);
   });
 
+  // api settings first — must populate settings-api-key before updateConnectionUI reads it
+  const api = state.api_settings || {};
+  applyApiSettings(api);
+
   // connection
   isConnected = state.connected;
   updateConnectionUI(isConnected);
 
   // context
   updateContextStatus(state.project_label, state.context_count, state.fallback_mode);
-
-  // api settings
-  const api = state.api_settings || {};
-  applyApiSettings(api);
 }
 
 function applyApiSettings(api) {
@@ -696,13 +696,17 @@ window.updateContextStatus = function(label, count, fallback) {
 
 function updateConnectionUI(connected) {
   isConnected = connected;
-  const dot = $('status-dot');
-  dot.classList.toggle('red', !connected);
+  $('status-dot').classList.toggle('red', !connected);
   const hasCustom = !!($('settings-api-key').value || '').trim();
   $('optimize-btn').disabled = !(connected || hasCustom);
   if (!connected && !hasCustom) {
     $('project-label').textContent = '未登录 — 请启动 Claude Code 完成登录';
   }
+  // keep settings overlay OAuth indicator in sync
+  const settingsDot = $('settings-oauth-dot');
+  const settingsTxt = $('settings-oauth-text');
+  if (settingsDot) settingsDot.classList.toggle('red', !connected);
+  if (settingsTxt) settingsTxt.textContent = connected ? '已连接' : '未检测到登录';
 }
 
 // ---- opacity slider
@@ -745,7 +749,11 @@ $('settings-btn').addEventListener('click', async () => {
   $('settings-overlay').style.display = 'flex';
 });
 
-$('settings-close-btn').addEventListener('click', () => {
+$('settings-close-btn').addEventListener('click', async () => {
+  try {
+    const api = await window.pywebview.api.get_api_settings();
+    applyApiSettings(api);
+  } catch (_) {}
   $('settings-overlay').style.display = 'none';
 });
 

@@ -17,6 +17,8 @@ PRISM_HISTORY_PATH = Path.home() / ".prism_history.json"
 def _infer_base_url(key: str) -> str:
     if key.startswith("sk-or-"):
         return "https://openrouter.ai/api/v1"
+    if key.startswith("sk-"):
+        return "https://api.deepseek.com/v1"
     return "https://api.openai.com/v1"
 
 DEFAULT_CONFIG = {
@@ -103,7 +105,7 @@ class PrismBackend:
                     data = json.load(f)
                 oauth = data.get("claudeAiOauth") or {}
                 token = oauth.get("accessToken") or data.get("claudeAiOauthToken", "")
-                if token:
+                if token and isinstance(token, str):
                     self._oauth_token = token
                     return
             except Exception:
@@ -366,7 +368,8 @@ class PrismBackend:
         self._api_cancel_event.clear()
         result = {}
         base_url = self._config.get("custom_base_url", "").strip()
-        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-")
+        _anthropic_base = base_url and base_url.rstrip("/").endswith("/anthropic")
+        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-") or _anthropic_base
 
         def call():
             try:
