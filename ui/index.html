@@ -561,6 +561,8 @@
       <div class="settings-section">
         <div class="settings-label">自定义 API Key（留空则使用上方账户）</div>
         <input class="settings-input" type="password" id="settings-api-key" placeholder="sk-ant-api03-… / sk-…" autocomplete="off">
+        <div class="settings-label" style="margin-top:6px;">Base URL（非 Anthropic Key 时必填）</div>
+        <input class="settings-input" type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" autocomplete="off">
         <div class="settings-label" style="margin-top:6px;">模型</div>
         <input class="settings-input" type="text" id="settings-model" placeholder="claude-sonnet-4-6" list="model-list">
         <datalist id="model-list">
@@ -571,12 +573,10 @@
           <option value="deepseek-chat">
           <option value="deepseek-reasoner">
         </datalist>
-        <div class="settings-label" style="margin-top:6px;">Base URL（非 Anthropic Key 时必填）</div>
-        <input class="settings-input" type="text" id="settings-base-url" placeholder="https://api.deepseek.com" autocomplete="off">
       </div>
       <div class="settings-hint">
         Anthropic Key（sk-ant-…）自动走 Anthropic API，无需填 Base URL。<br>
-        其他 Key（DeepSeek、OpenRouter 等）需填对应 Base URL。
+        其他服务（DeepSeek、OpenRouter 等）需填含 /v1 的完整 Base URL。
       </div>
     </div>
     <div class="overlay-actions" style="flex-shrink:0;padding-top:4px;">

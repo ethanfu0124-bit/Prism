@@ -15,13 +15,13 @@ PRISM_CWD_PATH = Path.home() / ".prism_cwd"
 PRISM_CONFIG_PATH = Path.home() / ".prism_config.json"
 PRISM_HISTORY_PATH = Path.home() / ".prism_history.json"
 
-_BASE_URL_MAP = {
-    "sk-": "https://api.deepseek.com",
-    "sk-or-": "https://openrouter.ai/api/v1",
-}
+_BASE_URL_MAP = [
+    ("sk-or-",  "https://openrouter.ai/api/v1"),
+    ("sk-",     "https://api.deepseek.com/v1"),
+]
 
 def _infer_base_url(key: str) -> str:
-    for prefix, url in _BASE_URL_MAP.items():
+    for prefix, url in _BASE_URL_MAP:
         if key.startswith(prefix):
             return url
     return "https://api.openai.com/v1"
@@ -351,13 +351,17 @@ class PrismBackend:
         result = {}
 
         base_url = self._config.get("custom_base_url", "").strip()
-        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-")
+        _anthropic_base = base_url and base_url.rstrip("/").endswith("/anthropic")
+        use_anthropic = (not custom_key) or custom_key.startswith("sk-ant-") or _anthropic_base
 
         def call():
             try:
                 if use_anthropic:
                     if custom_key:
-                        client = anthropic.Anthropic(api_key=custom_key)
+                        kwargs = {"api_key": custom_key}
+                        if base_url:
+                            kwargs["base_url"] = base_url
+                        client = anthropic.Anthropic(**kwargs)
                     else:
                         client = anthropic.Anthropic(auth_token=self._oauth_token)
                     response = client.messages.create(
@@ -370,7 +374,7 @@ class PrismBackend:
                     if self._api_cancel_event.is_set():
                         result["cancelled"] = True
                         return
-                    text = next((b.text for b in response.content if hasattr(b, "text")), "")
+                    text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
                 else:
                     resolved_url = base_url or _infer_base_url(custom_key)
                     oa_client = _openai.OpenAI(api_key=custom_key, base_url=resolved_url)
